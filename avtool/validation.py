@@ -166,7 +166,23 @@ def create_checksum_validation_report(
     """
 
 
-def validate_directory_checksums_command(path: pathlib.Path) -> None:
+def read_checksum_file(file_path: pathlib.Path) -> str:
+    with open(file_path.absolute(), "r") as f:
+        return f.read().strip()
+
+
+def validate_directory_checksums_command(
+    path: pathlib.Path,
+    locate_checksum_strategy: Callable[
+        [pathlib.Path], Iterable[pathlib.Path]
+    ] = locate_checksum_files,
+    read_checksums_strategy: Callable[
+        [pathlib.Path], str
+    ] = read_checksum_file,
+    compare_checksum_to_target_strategy: Callable[
+        [str, pathlib.Path], Optional[List[str]]
+    ] = validate_file_against_expected_hash,
+) -> None:
     """Validate checksum files located inside the directory.
 
     Args:
@@ -174,12 +190,11 @@ def validate_directory_checksums_command(path: pathlib.Path) -> None:
 
     """
     logger.info("Locating checksums files...")
-    checksum_files = list(locate_checksum_files(path))
+    checksum_files = list(locate_checksum_strategy(path))
     logger.info("Validating checksums...")
     errors = []
     for i, checksum_file in enumerate(checksum_files):
-        with open(checksum_file.absolute(), "r") as f:
-            expected_hash_value = f.read().strip()
+        expected_hash_value = read_checksums_strategy(checksum_file)
 
         target_file = pathlib.Path(
             os.path.join(
@@ -192,8 +207,8 @@ def validate_directory_checksums_command(path: pathlib.Path) -> None:
             len(checksum_files),
             target_file.relative_to(path),
         )
-        issues = validate_file_against_expected_hash(
-            expected_hash=expected_hash_value, target_file=target_file
+        issues = compare_checksum_to_target_strategy(
+            expected_hash_value, target_file
         )
         if issues:
             file_report = ", ".join(issues)
